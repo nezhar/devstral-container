@@ -1,0 +1,33 @@
+# Docker
+.docker/
+*.log
+
+# Configuration (may contain API keys)
+config/
+.config/
+
+# Logs database
+*.db
+*.db-journal
+
+# mitmproxy certificates
+mitmproxy-*
+*.pem
+*.p12
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python

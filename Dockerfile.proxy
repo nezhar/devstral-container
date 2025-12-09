@@ -1,0 +1,18 @@
+FROM python:3.11-slim
+
+# Install mitmproxy
+RUN pip install --no-cache-dir mitmproxy
+
+# Create directory for logs and scripts
+RUN mkdir -p /proxy/logs
+
+# Copy the proxy script
+COPY proxy_script.py /proxy/proxy_script.py
+
+WORKDIR /proxy
+
+# Expose proxy port
+EXPOSE 8080
+
+# Run mitmproxy with the logging script
+CMD ["mitmdump", "--set", "confdir=/root/.mitmproxy", "-s", "/proxy/proxy_script.py", "--listen-host", "0.0.0.0", "--listen-port", "8080", "--ssl-insecure"]

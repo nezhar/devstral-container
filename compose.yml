@@ -1,0 +1,49 @@
+services:
+  devstral-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: devstral-cli
+    stdin_open: true
+    tty: true
+    volumes:
+      - ${PWD}:/workspace
+      - ${HOME}/.config/devstral-container/config:/root/.config/vibe
+      - ${HOME}/.config/devstral-container/proxy:/root/.mitmproxy
+    environment:
+      - HTTPS_PROXY=${PROXY_ENABLED:-}
+    networks:
+      - devstral-network
+
+  devstral-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    image: devstral-proxy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${HOME}/.config/devstral-container/proxy:/root/.mitmproxy
+      - ${HOME}/.config/devstral-container/proxy:/proxy/logs
+    networks:
+      - devstral-network
+    profiles:
+      - proxy
+
+  devstral-datasette:
+    build:
+      context: .
+      dockerfile: Dockerfile.datasette
+    image: devstral-datasette
+    ports:
+      - "8001:8001"
+    volumes:
+      - ${HOME}/.config/devstral-container/proxy:/data
+    networks:
+      - devstral-network
+    profiles:
+      - proxy
+
+networks:
+  devstral-network:
+    driver: bridge
