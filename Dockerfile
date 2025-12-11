@@ -27,7 +27,7 @@ RUN curl -LsSf https://mistral.ai/vibe/install.sh | bash && \
 ENV HTTPS_PROXY=""
 
 # Create config directory
-RUN mkdir -p /root/.config/vibe
+RUN mkdir -p /root/.vibe
 
 # Set working directory
 WORKDIR /workspace

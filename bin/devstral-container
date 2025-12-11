@@ -79,6 +79,9 @@ done
 mkdir -p "${CONFIG_DIR}/config"
 mkdir -p "${CONFIG_DIR}/proxy"
 
+# Store the original working directory before changing to project dir
+export WORKSPACE_DIR="${PWD}"
+
 # Build profiles argument
 PROFILES=""
 if [[ "$ENABLE_PROXY" == true ]]; then
@@ -94,39 +97,96 @@ else
     export PROXY_ENABLED=""
 fi
 
-# Change to project directory
-cd "$PROJECT_DIR"
+# Set image details
+VERSION="${DEVSTRAL_CONTAINER_VERSION:-0.1.0}"
+IMAGE="nezhar/devstral-cli:${VERSION}"
+PROXY_IMAGE="nezhar/devstral-proxy:${VERSION}"
+DATASETTE_IMAGE="nezhar/devstral-datasette:${VERSION}"
+NETWORK_NAME="devstral-network"
+PROXY_CONTAINER_NAME="devstral-proxy"
+DATASETTE_CONTAINER_NAME="devstral-datasette"
+
+# Check if images exist, build if not or if --build flag is set
+if [[ -n "$BUILD_FLAG" ]] || ! docker image inspect "$IMAGE" &>/dev/null; then
+    echo -e "${YELLOW}Building devstral-cli image...${NC}"
+    docker build -t "$IMAGE" -f "${PROJECT_DIR}/Dockerfile" "${PROJECT_DIR}"
+fi
 
 # Start background services if needed
 if [[ "$ENABLE_PROXY" == true ]]; then
     echo -e "${YELLOW}Starting proxy services...${NC}"
-    docker compose $PROFILES up -d $BUILD_FLAG devstral-proxy
+
+    # Create network if it doesn't exist
+    docker network create "$NETWORK_NAME" 2>/dev/null || true
+
+    # Build proxy image if needed
+    if [[ -n "$BUILD_FLAG" ]] || ! docker image inspect "$PROXY_IMAGE" &>/dev/null; then
+        echo -e "${YELLOW}Building devstral-proxy image...${NC}"
+        docker build -t "$PROXY_IMAGE" -f "${PROJECT_DIR}/Dockerfile.proxy" "${PROJECT_DIR}"
+    fi
+
+    # Start proxy container
+    docker run -d --rm \
+        --name "$PROXY_CONTAINER_NAME" \
+        --network "$NETWORK_NAME" \
+        -p 8080:8080 \
+        -v "${CONFIG_DIR}/proxy:/root/.mitmproxy" \
+        -v "${CONFIG_DIR}/proxy:/proxy/logs" \
+        "$PROXY_IMAGE" 2>/dev/null || true
 
     if [[ "$ENABLE_DATASETTE" == true ]]; then
-        docker compose $PROFILES up -d $BUILD_FLAG devstral-datasette
+        # Build datasette image if needed
+        if [[ -n "$BUILD_FLAG" ]] || ! docker image inspect "$DATASETTE_IMAGE" &>/dev/null; then
+            echo -e "${YELLOW}Building devstral-datasette image...${NC}"
+            docker build -t "$DATASETTE_IMAGE" -f "${PROJECT_DIR}/Dockerfile.datasette" "${PROJECT_DIR}"
+        fi
+
+        # Start datasette container
+        docker run -d --rm \
+            --name "$DATASETTE_CONTAINER_NAME" \
+            --network "$NETWORK_NAME" \
+            -p 8001:8001 \
+            -v "${CONFIG_DIR}/proxy:/data" \
+            "$DATASETTE_IMAGE" 2>/dev/null || true
+
+        echo -e "${GREEN}Datasette will be available at http://localhost:8001${NC}"
     fi
 
     # Wait for proxy to be ready
     sleep 2
 fi
 
-# Build CLI image if needed
-if [[ -n "$BUILD_FLAG" ]]; then
-    echo -e "${YELLOW}Building devstral-cli image...${NC}"
-    docker compose build devstral-cli
+# Prepare docker run command
+DOCKER_ARGS=(
+    --rm -it
+    -v "${WORKSPACE_DIR}:/workspace"
+    -v "${CONFIG_DIR}/config:/root/.vibe"
+    -e "USER_UID=$(id -u)"
+    -e "USER_GID=$(id -g)"
+)
+
+# Add proxy configuration if enabled
+if [[ "$ENABLE_PROXY" == true ]]; then
+    DOCKER_ARGS+=(
+        --network "$NETWORK_NAME"
+        -e "HTTPS_PROXY=http://${PROXY_CONTAINER_NAME}:8080"
+    )
 fi
 
 # Run the CLI
 if [[ -z "$VIBE_COMMAND" ]]; then
     # Interactive mode
-    docker compose run --rm devstral-cli
+    docker run "${DOCKER_ARGS[@]}" "$IMAGE"
 else
     # Command mode
-    docker compose run --rm devstral-cli vibe "$VIBE_COMMAND"
+    docker run "${DOCKER_ARGS[@]}" "$IMAGE" vibe "$VIBE_COMMAND"
 fi
 
 # Cleanup
 if [[ "$ENABLE_PROXY" == true ]]; then
     echo -e "${YELLOW}Proxy services are still running. To stop them, run:${NC}"
-    echo -e "${YELLOW}  docker compose --profile proxy down${NC}"
+    echo -e "${YELLOW}  docker stop $PROXY_CONTAINER_NAME${NC}"
+    if [[ "$ENABLE_DATASETTE" == true ]]; then
+        echo -e "${YELLOW}  docker stop $DATASETTE_CONTAINER_NAME${NC}"
+    fi
 fi

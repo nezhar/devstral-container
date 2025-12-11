@@ -3,12 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: devstral-cli
+    image: "nezhar/devstral-cli:${DEVSTRAL_CONTAINER_VERSION:-0.1.0}"
     stdin_open: true
     tty: true
     volumes:
-      - ${PWD}:/workspace
-      - ${HOME}/.config/devstral-container/config:/root/.config/vibe
+      - ${WORKSPACE_DIR:-${PWD}}:/workspace
+      - ${HOME}/.config/devstral-container/config:/root/.vibe
       - ${HOME}/.config/devstral-container/proxy:/root/.mitmproxy
     environment:
       - HTTPS_PROXY=${PROXY_ENABLED:-}
@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.proxy
-    image: devstral-proxy
+    image: "nezhar/devstral-proxy:${DEVSTRAL_CONTAINER_VERSION:-0.1.0}"
     ports:
       - "8080:8080"
     volumes:
@@ -34,7 +34,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.datasette
-    image: devstral-datasette
+    image: "nezhar/devstral-datasette:${DEVSTRAL_CONTAINER_VERSION:-0.1.0}"
     ports:
       - "8001:8001"
     volumes:
