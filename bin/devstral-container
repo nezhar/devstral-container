@@ -23,7 +23,6 @@ OPTIONS:
     --proxy         Enable API request/response logging via proxy
     --no-proxy      Disable proxy (default)
     --datasette     Start Datasette web interface for viewing logs (implies --proxy)
-    --build         Force rebuild of Docker images
     -h, --help      Show this help message
 
 COMMAND:
@@ -34,7 +33,6 @@ EXAMPLES:
     devstral-container --proxy            # Interactive mode with API logging
     devstral-container --datasette        # Interactive mode with logging and web UI
     devstral-container "analyze the code" # Run specific command
-    devstral-container --build            # Rebuild images and start
 
 EOF
 }
@@ -42,7 +40,6 @@ EOF
 # Parse arguments
 ENABLE_PROXY=false
 ENABLE_DATASETTE=false
-BUILD_FLAG=""
 VIBE_COMMAND=""
 
 while [[ $# -gt 0 ]]; do
@@ -58,10 +55,6 @@ while [[ $# -gt 0 ]]; do
         --datasette)
             ENABLE_PROXY=true
             ENABLE_DATASETTE=true
-            shift
-            ;;
-        --build)
-            BUILD_FLAG="--build"
             shift
             ;;
         -h|--help)
@@ -106,24 +99,12 @@ NETWORK_NAME="devstral-network"
 PROXY_CONTAINER_NAME="devstral-proxy"
 DATASETTE_CONTAINER_NAME="devstral-datasette"
 
-# Check if images exist, build if not or if --build flag is set
-if [[ -n "$BUILD_FLAG" ]] || ! docker image inspect "$IMAGE" &>/dev/null; then
-    echo -e "${YELLOW}Building devstral-cli image...${NC}"
-    docker build -t "$IMAGE" -f "${PROJECT_DIR}/Dockerfile" "${PROJECT_DIR}"
-fi
-
 # Start background services if needed
 if [[ "$ENABLE_PROXY" == true ]]; then
     echo -e "${YELLOW}Starting proxy services...${NC}"
 
     # Create network if it doesn't exist
     docker network create "$NETWORK_NAME" 2>/dev/null || true
-
-    # Build proxy image if needed
-    if [[ -n "$BUILD_FLAG" ]] || ! docker image inspect "$PROXY_IMAGE" &>/dev/null; then
-        echo -e "${YELLOW}Building devstral-proxy image...${NC}"
-        docker build -t "$PROXY_IMAGE" -f "${PROJECT_DIR}/Dockerfile.proxy" "${PROJECT_DIR}"
-    fi
 
     # Start proxy container
     docker run -d --rm \
@@ -135,12 +116,6 @@ if [[ "$ENABLE_PROXY" == true ]]; then
         "$PROXY_IMAGE" 2>/dev/null || true
 
     if [[ "$ENABLE_DATASETTE" == true ]]; then
-        # Build datasette image if needed
-        if [[ -n "$BUILD_FLAG" ]] || ! docker image inspect "$DATASETTE_IMAGE" &>/dev/null; then
-            echo -e "${YELLOW}Building devstral-datasette image...${NC}"
-            docker build -t "$DATASETTE_IMAGE" -f "${PROJECT_DIR}/Dockerfile.datasette" "${PROJECT_DIR}"
-        fi
-
         # Start datasette container
         docker run -d --rm \
             --name "$DATASETTE_CONTAINER_NAME" \
